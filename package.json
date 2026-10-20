@@ -1,0 +1,41 @@
+{
+  "name": "vue3-source-code",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Vue 3.5.44 源码逐章拆解：讲解 + 图示 + 可运行示例 + mini 实现",
+  "scripts": {
+    "ex": "tsx",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "play": "vite playground --open",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vue/compiler-core": "3.5.44",
+    "@vue/compiler-dom": "3.5.44",
+    "@vue/compiler-sfc": "3.5.44",
+    "@vue/reactivity": "3.5.44",
+    "@vue/runtime-core": "3.5.44",
+    "@vue/runtime-dom": "3.5.44",
+    "@vue/server-renderer": "3.5.44",
+    "@vue/shared": "3.5.44",
+    "vue": "3.5.44",
+    "vue-next": "npm:vue@3.6.0-rc.12",
+    "@vue/compiler-vapor": "3.6.0-rc.12"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@types/node": "^22.10.0",
+    "happy-dom": "^15.11.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.0",
+    "vitest": "^2.1.8"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
+  }
+}

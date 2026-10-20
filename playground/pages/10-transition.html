@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>10. Transition / TransitionGroup 时间线</title>
+<style>
+  :root { color-scheme: light; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    max-width: 920px;
+    margin: 32px auto;
+    padding: 0 16px;
+    color: #1f2937;
+    background: #f8fafc;
+  }
+  h1 { font-size: 22px; }
+  h2 { font-size: 17px; margin-top: 40px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; }
+  p.note { color: #64748b; font-size: 14px; line-height: 1.6; }
+  .panel {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+    margin-top: 12px;
+  }
+  button {
+    cursor: pointer;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    border-radius: 6px;
+    padding: 6px 12px;
+    margin-right: 8px;
+    font-size: 13px;
+  }
+  button:hover { background: #f1f5f9; }
+
+  /* ---- 1. 单元素 fade 过渡：故意放慢到 600ms，方便在时间线里看清楚几个阶段 ---- */
+  .box-wrap { margin-top: 14px; height: 70px; }
+  .box {
+    width: 160px;
+    height: 56px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #6366f1, #8b5cf6);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 600;
+  }
+  .fade-enter-active,
+  .fade-leave-active {
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .fade-enter-from,
+  .fade-leave-to {
+    opacity: 0;
+    transform: translateY(-16px) scale(0.9);
+  }
+  .fade-enter-to,
+  .fade-leave-from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  .log {
+    margin-top: 12px;
+    background: #0f172a;
+    color: #a5f3fc;
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    padding: 10px 12px;
+    border-radius: 8px;
+    max-height: 220px;
+    overflow: auto;
+    white-space: pre-wrap;
+  }
+
+  /* ---- 2. TransitionGroup 的 FLIP 列表 ---- */
+  .list {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+    min-height: 56px;
+  }
+  .item {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+  }
+  .list-move,
+  .list-enter-active,
+  .list-leave-active {
+    transition: all 0.5s ease;
+  }
+  .list-enter-from,
+  .list-leave-to {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  /* 离开的元素脱离文档流，这样剩下的元素才能在同一帧里计算出「新位置」，FLIP 的 Invert 才有意义 */
+  .list-leave-active {
+    position: absolute;
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<!--
+  运行：pnpm play，然后浏览器打开 /pages/10-transition.html
+  演示：① <Transition> 包裹的单元素，class 的增删时间线（用 MutationObserver 实时记录）
+       ② <TransitionGroup> 的 FLIP 动画：shuffle / 插入 / 删除列表项
+  看点：① enter/leave 各自会依次打上 3 个阶段的类名（xxx-from → xxx-active 同时存在 → xxx-to），
+          时间线面板能看到每一次 class 变化的相对时间戳
+       ② TransitionGroup 在 shuffle 时，未被增删的元素也会播放一次「移动」动画（list-move），
+          这正是 chapters/10-builtin-components 讲的 FLIP 技巧：先用 transform 把元素拉回旧位置，
+          强制 reflow，再清空 transform 让浏览器把这次位移动画出来
+-->
+
+<script type="module">
+  import { createApp, h, ref, defineComponent, Transition, TransitionGroup } from 'vue'
+
+  // ====================================================================
+  // 1. 单元素 Transition：用 MutationObserver 把 class 的变化打印成时间线
+  // ====================================================================
+  const TimelineDemo = defineComponent({
+    name: 'TimelineDemo',
+    setup() {
+      const visible = ref(true)
+      const log = ref([])
+      const t0 = performance.now()
+      const push = msg => {
+        log.value = [...log.value, `[+${(performance.now() - t0).toFixed(0).padStart(4, ' ')}ms] ${msg}`].slice(-30)
+      }
+
+      let observer = null
+      // ref 回调的函数本身在 setup() 里只创建一次，identity 稳定，
+      // 不会在每次 log 更新触发的重新渲染里被重复触发
+      const boxRef = el => {
+        if (observer) {
+          observer.disconnect()
+          observer = null
+        }
+        if (el) {
+          observer = new MutationObserver(mutations => {
+            for (const m of mutations) {
+              if (m.attributeName === 'class') {
+                push(`class = "${el.getAttribute('class') || ''}"`)
+              }
+            }
+          })
+          observer.observe(el, { attributes: true, attributeFilter: ['class'] })
+        }
+      }
+
+      function toggle() {
+        visible.value = !visible.value
+        push(`点击按钮 → visible = ${visible.value}（${visible.value ? '即将 enter' : '即将 leave'}）`)
+      }
+
+      return () =>
+        h('div', { class: 'panel' }, [
+          h('button', { onClick: toggle }, visible.value ? '隐藏（触发 leave）' : '显示（触发 enter）'),
+          h('div', { class: 'box-wrap' }, [
+            h(
+              Transition,
+              { name: 'fade' },
+              {
+                default: () => (visible.value ? [h('div', { class: 'box', ref: boxRef }, 'fade me')] : []),
+              },
+            ),
+          ]),
+          h('div', { class: 'log' }, log.value.join('\n') || '（点击按钮开始）'),
+        ])
+    },
+  })
+
+  // ====================================================================
+  // 2. TransitionGroup：FLIP 列表 shuffle / 增删
+  // ====================================================================
+  const COLORS = ['#f87171', '#fb923c', '#facc15', '#4ade80', '#22d3ee', '#818cf8', '#f472b6', '#a3a3a3']
+
+  const GroupDemo = defineComponent({
+    name: 'GroupDemo',
+    setup() {
+      const items = ref(Array.from({ length: 8 }, (_, i) => ({ id: i })))
+      let nextId = items.value.length
+
+      function shuffle() {
+        items.value = [...items.value].sort(() => Math.random() - 0.5)
+      }
+      function addOne() {
+        const idx = Math.floor(Math.random() * (items.value.length + 1))
+        const next = items.value.slice()
+        next.splice(idx, 0, { id: nextId++ })
+        items.value = next
+      }
+      function removeOne() {
+        if (!items.value.length) return
+        const idx = Math.floor(Math.random() * items.value.length)
+        const next = items.value.slice()
+        next.splice(idx, 1)
+        items.value = next
+      }
+
+      return () =>
+        h('div', { class: 'panel' }, [
+          h('div', null, [
+            h('button', { onClick: shuffle }, '打乱顺序（shuffle）'),
+            h('button', { onClick: addOne }, '随机插入一个'),
+            h('button', { onClick: removeOne }, '随机删除一个'),
+          ]),
+          h(
+            TransitionGroup,
+            { tag: 'div', name: 'list', class: 'list' },
+            {
+              default: () =>
+                items.value.map(it =>
+                  h(
+                    'div',
+                    { class: 'item', key: it.id, style: { background: COLORS[it.id % COLORS.length] } },
+                    String(it.id),
+                  ),
+                ),
+            },
+          ),
+        ])
+    },
+  })
+
+  const App = defineComponent({
+    name: 'App',
+    render() {
+      return h('div', null, [
+        h('h1', null, '10. Transition / TransitionGroup'),
+        h(
+          'p',
+          { class: 'note' },
+          '对应 chapters/10-builtin-components 的 BaseTransition / Transition / TransitionGroup 小节。' +
+            '这里不经过任何构建期模板编译，全部用 h() 手写 render 函数，和章节示例的写法保持一致。',
+        ),
+        h('h2', null, '1. CSS 类名添加/移除的时间线'),
+        h(TimelineDemo),
+        h('h2', null, '2. TransitionGroup 的 FLIP 列表动画'),
+        h(GroupDemo),
+      ])
+    },
+  })
+
+  createApp(App).mount('#app')
+</script>
+</body>
+</html>

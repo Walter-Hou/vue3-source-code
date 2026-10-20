@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<!--
+  运行：pnpm play（在 ROOT 下），然后访问 /pages/14-custom-element.html
+  演示：runtime-dom/src/apiCustomElement.ts 的 defineCustomElement：
+    1. props 反射：声明的 prop 既可以用 attribute 写（<my-counter count="5">），
+       也可以用 JS property 写（el.count = 5），两个方向会自动同步（_setAttr/_setProp）。
+    2. emit 被拦截并转成真实的 CustomEvent，可以用原生 addEventListener 监听。
+    3. 样式隔离：组件内部样式写在 shadow DOM 里，不会被页面的全局样式影响，
+       也不会污染到页面上。
+  看点：
+    - 点击组件内部的按钮，count 会变化，并且组件外部通过 attribute 观察面板显示的
+      "count attribute" 也会同步刷新（prop -> attribute 反射）。
+    - 外部按钮直接改 `el.count`（JS property），组件内部视图也会同步更新。
+    - 组件 emit('change', n) 会变成一个 `change` CustomEvent，detail 里能拿到参数。
+    - 页面全局样式把 .title 设成蓝色，但组件 shadow DOM 内部自己的 .title 是红色且加粗——
+      两者互不影响，这就是 Shadow DOM 带来的样式隔离。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>14 · defineCustomElement</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, 'PingFang SC', system-ui, sans-serif;
+      max-width: 860px;
+      margin: 24px auto;
+      padding: 0 16px;
+      line-height: 1.6;
+    }
+    h1 { font-size: 20px; }
+    h2 { font-size: 16px; margin-top: 36px; border-bottom: 1px solid #8884; padding-bottom: 6px; }
+    .panel { border: 1px solid #8884; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+    button {
+      font-size: 14px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #8886;
+      cursor: pointer;
+      background: #fff;
+    }
+    button:hover { background: #f0f0f0; }
+    .log {
+      background: #111;
+      color: #0f0;
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+      padding: 10px;
+      height: 160px;
+      overflow-y: auto;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    code { background: #8882; padding: 1px 5px; border-radius: 4px; }
+    /*
+      页面级全局样式：故意把 .title 设成蓝色，用来对比 shadow DOM 内部的同名 class
+      是否会被这条全局规则影响（结论：不会，Shadow DOM 有独立的样式作用域）。
+    */
+    .title { color: blue; font-weight: normal; }
+  </style>
+</head>
+<body>
+  <h1>14 · runtime-dom 自定义元素：<code>defineCustomElement</code></h1>
+  <p>对应章节：<code>chapters/14-runtime-dom</code> 第 14.10 节。这个页面需要真实浏览器（Shadow DOM / Custom Elements）。</p>
+
+  <h2>1. 组件本体（在 Shadow DOM 里渲染，样式隔离）</h2>
+  <div class="panel">
+    <p>页面全局样式把 <code>.title</code> 设成了蓝色（见上面这句话外层没有样式，但下面组件内部的标题不受它影响）：</p>
+    <my-counter id="c1" count="5" step="2"></my-counter>
+  </div>
+
+  <h2>2. props 反射：attribute ⇄ property</h2>
+  <div class="panel">
+    <div class="row">
+      <button id="set-count-prop">外部用 JS property 设置 el.count = 100</button>
+      <button id="set-step-attr">外部用 attribute 设置 step="5"</button>
+      <button id="read-both">读取当前 count（attribute 和 property 两种方式）</button>
+    </div>
+    <div class="log" id="log-props"></div>
+  </div>
+
+  <h2>3. emit → CustomEvent</h2>
+  <div class="panel">
+    <p>组件内部每次 count 变化都会 <code>emit('change', count)</code>；外部用原生 <code>addEventListener('change', ...)</code> 监听。</p>
+    <div class="log" id="log-events"></div>
+  </div>
+
+  <script type="module">
+    import { defineCustomElement, h, ref } from 'vue'
+
+    const MyCounter = defineCustomElement({
+      name: 'MyCounter',
+      props: {
+        count: { type: Number, default: 0 },
+        step: { type: Number, default: 1 },
+      },
+      emits: ['change'],
+      // defineCustomElement 的样式会被注入到这个元素自己的 shadow DOM 里，
+      // 不受页面全局样式影响，也不会泄漏到页面上（见 apiCustomElement.ts 的 _applyStyles）。
+      styles: [
+        `
+        .box { font-family: inherit; padding: 12px; border: 2px solid #e67e22; border-radius: 8px; }
+        .title { color: #e67e22; font-weight: bold; margin: 0 0 8px; }
+        button { font-size: 13px; padding: 4px 10px; border-radius: 4px; border: 1px solid #8886; cursor: pointer; }
+        `,
+      ],
+      setup(props, { emit }) {
+        // VueElement 会把声明的 props 变成这个自定义元素实例上的 getter/setter
+        // （_resolveProps，见 README 14.10），这里的 props.count 已经是最新值了。
+        const local = ref(props.count)
+
+        function sync(n) {
+          local.value = n
+          emit('change', n)
+        }
+
+        return () =>
+          h('div', { class: 'box' }, [
+            h('p', { class: 'title' }, `count = ${props.count}（shadow DOM 内部标题，不受外部 .title 影响）`),
+            h('div', { style: 'display:flex;gap:8px;align-items:center;' }, [
+              h(
+                'button',
+                { onClick: () => sync(props.count - props.step) },
+                `-${props.step}`,
+              ),
+              h('span', String(props.count)),
+              h(
+                'button',
+                { onClick: () => sync(props.count + props.step) },
+                `+${props.step}`,
+              ),
+            ]),
+          ])
+      },
+    })
+
+    customElements.define('my-counter', MyCounter)
+
+    // ---------- props 反射演示 ----------
+    const logProps = document.getElementById('log-props')
+    function appendLog(container, msg) {
+      const line = document.createElement('div')
+      line.textContent = `[${performance.now().toFixed(1)}ms] ${msg}`
+      container.appendChild(line)
+      container.scrollTop = container.scrollHeight
+    }
+
+    const c1 = document.getElementById('c1')
+
+    document.getElementById('set-count-prop').addEventListener('click', () => {
+      // 直接赋值 JS property：VueElement 的 _setProp 会把它同步反射成 count="100" attribute
+      c1.count = 100
+      appendLog(logProps, '外部执行 el.count = 100')
+      queueMicrotask(() => {
+        appendLog(logProps, `同步后 el.getAttribute('count') = ${c1.getAttribute('count')}`)
+      })
+    })
+
+    document.getElementById('set-step-attr').addEventListener('click', () => {
+      // 直接改 attribute：attributeChangedCallback -> _setAttr -> _setProp(shouldReflect=false)
+      c1.setAttribute('step', '5')
+      appendLog(logProps, '外部执行 el.setAttribute("step", "5")')
+      queueMicrotask(() => {
+        appendLog(logProps, `同步后 el.step（JS property）= ${c1.step}`)
+      })
+    })
+
+    document.getElementById('read-both').addEventListener('click', () => {
+      appendLog(
+        logProps,
+        `attribute: count="${c1.getAttribute('count')}"，property: el.count=${c1.count}（两者应该一致）`,
+      )
+    })
+
+    // ---------- emit -> CustomEvent 演示 ----------
+    const logEvents = document.getElementById('log-events')
+    c1.addEventListener('change', e => {
+      appendLog(logEvents, `收到原生 change CustomEvent，e.detail = ${JSON.stringify(e.detail)}`)
+    })
+
+    appendLog(logProps, '页面已就绪：点击上面组件内部的 +/- 按钮，再回来点击按钮观察 property/attribute 的同步')
+    appendLog(logEvents, '页面已就绪：点击组件内部的 +/- 按钮会触发一次 emit(\'change\', n) -> change 事件')
+  </script>
+</body>
+</html>

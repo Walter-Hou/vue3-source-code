@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<!--
+  运行：pnpm play（在 ROOT 下），然后访问 /pages/14-events-timestamp.html
+  演示：
+    1. patchEvent 的 invoker 时间戳守卫（packages/runtime-dom/src/modules/events.ts#L88-L152）：
+       在子元素 click 事件"正在冒泡"的过程中，用低层 render() API 同步给祖先元素挂上一个新的
+       onClick（模拟 hand-written render function 场景，对应源码注释里 vuejs/vue#6566 的历史 bug）。
+       按浏览器规范，事件派发路径上的监听器列表是"实时读取"的——祖先元素此时确实会被通知到这次事件，
+       但 Vue 的 invoker 会发现 e._vts <= invoker.attached，直接跳过，不执行用户代码；
+       第二次点击时，祖先的 invoker.attached 已经是"过去"的时间戳，新事件正常触发。
+    2. .once / .capture / .passive 修饰符在真实浏览器事件系统下的效果。
+  看点：
+    - 第一次点击子按钮后，外层容器"刚挂上去"的 handler 不会被这次冒泡触发；
+      第二次点击才正常触发——这正是本章 README 14.6 节讲的时间戳守卫。
+    - .once 只触发一次；.capture 比子元素的冒泡监听器先执行；.passive 下 preventDefault() 不生效。
+-->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>14 · 事件时间戳机制 / 修饰符</title>
+  <style>
+    :root { color-scheme: light dark; }
+    body {
+      font-family: -apple-system, 'PingFang SC', system-ui, sans-serif;
+      max-width: 860px;
+      margin: 24px auto;
+      padding: 0 16px;
+      line-height: 1.6;
+    }
+    h1 { font-size: 20px; }
+    h2 { font-size: 16px; margin-top: 36px; border-bottom: 1px solid #8884; padding-bottom: 6px; }
+    .panel { border: 1px solid #8884; border-radius: 8px; padding: 16px; margin: 12px 0; }
+    #outer {
+      border: 3px solid #42b883;
+      border-radius: 8px;
+      padding: 24px;
+      transition: background-color .2s;
+    }
+    #outer.armed { background-color: #42b88322; }
+    button {
+      font-size: 14px;
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: 1px solid #8886;
+      cursor: pointer;
+      background: #fff;
+    }
+    button:hover { background: #f0f0f0; }
+    .log {
+      background: #111;
+      color: #0f0;
+      font-family: 'SF Mono', Menlo, monospace;
+      font-size: 12px;
+      padding: 10px;
+      height: 220px;
+      overflow-y: auto;
+      border-radius: 6px;
+      white-space: pre-wrap;
+    }
+    .log .warn { color: #ffb84d; }
+    .log .ok { color: #7fffa0; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      background: #8884;
+    }
+  </style>
+</head>
+<body>
+  <h1>14 · runtime-dom 事件系统：时间戳守卫 &amp; 修饰符</h1>
+  <p>对应章节：<code>chapters/14-runtime-dom</code> 第 14.6 节。这个页面需要真实浏览器（不是 happy-dom），因为要观察浏览器原生事件派发的"实时监听器列表"行为。</p>
+
+  <h2>1. 事件时间戳守卫（vuejs/vue#6566）</h2>
+  <div class="panel">
+    <p>点击下面的内层按钮：第一次点击会在冒泡过程中，用底层 <code>render()</code> API 同步给外层容器挂上一个新的 <code>onClick</code>；第二次点击验证这个新 handler 是否生效。</p>
+    <div id="app"></div>
+    <div class="row">
+      <span class="badge">outer handler 触发次数：<b id="outer-fired">0</b></span>
+      <span class="badge">inner 点击次数：<b id="inner-clicked">0</b></span>
+      <button id="reset-1">重置这个演示</button>
+    </div>
+    <div class="log" id="log-1"></div>
+  </div>
+
+  <h2>2. .once 修饰符</h2>
+  <div class="panel">
+    <div class="row">
+      <button id="once-btn">点我（.once）</button>
+      <span class="badge">onClickOnce 触发次数：<b id="once-count">0</b></span>
+    </div>
+    <div class="log" id="log-2"></div>
+  </div>
+
+  <h2>3. .capture 修饰符</h2>
+  <div class="panel">
+    <p>外层用 <code>onClickCapture</code>，内层用普通 <code>onClick</code>（冒泡）。点击内层按钮，观察谁先打印。</p>
+    <div id="capture-app"></div>
+    <div class="log" id="log-3"></div>
+  </div>
+
+  <h2>4. .passive 修饰符</h2>
+  <div class="panel">
+    <p>下面的滚动区域绑定了 <code>onWheelPassive</code>，内部调用了 <code>preventDefault()</code>——因为是 passive 监听器，浏览器会忽略这次 <code>preventDefault()</code>，区域仍然可以正常滚动（并在控制台打印一次警告）。</p>
+    <div id="passive-app"></div>
+    <div class="log" id="log-4"></div>
+  </div>
+
+  <script type="module">
+    import { h, render } from 'vue'
+
+    function nowStr() {
+      return performance.now().toFixed(1).padStart(8, ' ')
+    }
+
+    // ---------- 1. 事件时间戳守卫 ----------
+    const log1 = document.getElementById('log-1')
+    const outerFiredEl = document.getElementById('outer-fired')
+    const innerClickedEl = document.getElementById('inner-clicked')
+    const state1 = { armed: false, outerFired: 0, innerClicked: 0 }
+
+    function appendLog(container, msg, cls = '') {
+      const line = document.createElement('div')
+      if (cls) line.className = cls
+      line.textContent = `[${nowStr()}ms] ${msg}`
+      container.appendChild(line)
+      container.scrollTop = container.scrollHeight
+    }
+
+    function Outer() {
+      const props = { id: 'outer', class: state1.armed ? 'armed' : '' }
+      if (state1.armed) {
+        props.onClick = () => {
+          state1.outerFired++
+          outerFiredEl.textContent = String(state1.outerFired)
+          appendLog(log1, 'outer 的 onClick 被真正触发了！', 'ok')
+        }
+      }
+      return h('div', props, [
+        h('p', `outer armed = ${state1.armed}`),
+        h(
+          'button',
+          {
+            onClick: () => {
+              state1.innerClicked++
+              innerClickedEl.textContent = String(state1.innerClicked)
+              appendLog(log1, 'inner button 被点击，click 事件进入冒泡阶段')
+              if (!state1.armed) {
+                appendLog(
+                  log1,
+                  '在冒泡途中同步调用 render()，给 outer 挂上一个全新的 onClick invoker',
+                  'warn',
+                )
+                state1.armed = true
+                render(h(Outer), document.getElementById('app'))
+                appendLog(
+                  log1,
+                  'render() 已返回：outer 现在确实有了 click 监听器；原生事件会继续往上冒泡……',
+                )
+                appendLog(
+                  log1,
+                  '按 DOM 规范，outer 的监听器列表是"实时"的，这次事件理论上会通知到 outer —— 但 invoker 内部的' +
+                    ' e._vts <= invoker.attached 检查会让它直接返回，不执行用户代码。',
+                )
+              } else {
+                appendLog(log1, 'outer 已经挂好 handler 了，这次应该正常触发')
+              }
+            },
+          },
+          '点击我（内层按钮）',
+        ),
+      ])
+    }
+    render(h(Outer), document.getElementById('app'))
+
+    document.getElementById('reset-1').addEventListener('click', () => {
+      state1.armed = false
+      state1.outerFired = 0
+      state1.innerClicked = 0
+      outerFiredEl.textContent = '0'
+      innerClickedEl.textContent = '0'
+      log1.innerHTML = ''
+      render(h(Outer), document.getElementById('app'))
+      appendLog(log1, '已重置，outer 重新变回没有 onClick 的状态')
+    })
+
+    // ---------- 2. .once ----------
+    // 对应 packages/runtime-dom/src/modules/events.ts#L70-L86 的 parseName：
+    // onClickOnce -> addEventListener('click', invoker, { once: true })
+    const log2 = document.getElementById('log-2')
+    const onceCountEl = document.getElementById('once-count')
+    let onceCount = 0
+    // 用 h() 渲染一个完整按钮替换页面上的占位按钮（占位按钮只是给没有 JS 时的 HTML 骨架占位）
+    const onceHost = document.createElement('div')
+    document.getElementById('once-btn').replaceWith(onceHost)
+    render(
+      h(
+        'button',
+        {
+          id: 'once-btn',
+          onClickOnce: () => {
+            onceCount++
+            onceCountEl.textContent = String(onceCount)
+            appendLog(log2, '.once 处理函数触发了（只会发生一次）', 'ok')
+          },
+          onClick: () => {
+            appendLog(log2, '（对照）这是另一个没有 .once 的 onClick，每次点击都会打印')
+          },
+        },
+        '点我（.once）',
+      ),
+      onceHost,
+    )
+
+    // ---------- 3. .capture ----------
+    const log3 = document.getElementById('log-3')
+    function CaptureDemo() {
+      return h(
+        'div',
+        {
+          onClickCapture: () => appendLog(log3, 'outer 的 onClickCapture 先触发（capture 阶段）', 'ok'),
+          style: 'border:2px dashed #888;padding:16px;border-radius:8px;',
+        },
+        [
+          h(
+            'button',
+            {
+              onClick: () => appendLog(log3, 'inner button 的 onClick 后触发（bubble/target 阶段）'),
+            },
+            '点击我（观察 capture vs bubble 顺序）',
+          ),
+        ],
+      )
+    }
+    render(h(CaptureDemo), document.getElementById('capture-app'))
+
+    // ---------- 4. .passive ----------
+    const log4 = document.getElementById('log-4')
+    function PassiveDemo() {
+      return h(
+        'div',
+        {
+          onWheelPassive: e => {
+            // passive: true 下调用 preventDefault 不会生效，浏览器通常会在控制台打一条警告
+            e.preventDefault()
+            appendLog(
+              log4,
+              '触发了 wheel 滚动，handler 内调用了 preventDefault()，但因为是 passive，' +
+                '默认滚动行为不会被阻止（请实际滚动这个区域验证，并留意浏览器控制台的警告）',
+              'warn',
+            )
+          },
+          style:
+            'height:80px;overflow:auto;border:2px solid #8884;border-radius:8px;padding:8px;',
+        },
+        [h('div', { style: 'height:400px;' }, '在这个区域里滚动鼠标滚轮……')],
+      )
+    }
+    render(h(PassiveDemo), document.getElementById('passive-app'))
+
+    appendLog(log1, '页面已就绪，点击上面的内层按钮开始演示')
+  </script>
+</body>
+</html>
