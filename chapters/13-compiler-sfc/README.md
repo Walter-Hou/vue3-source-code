@@ -319,17 +319,17 @@ const count = _useModel<number>(__props, 'count')
 
 ```mermaid
 sequenceDiagram
-    participant Loop as scriptSetupAst.body 遍历
+    participant Walk as scriptSetupAst.body 遍历
     participant DP as processDefineProps
     participant DE as processDefineEmits
     participant DM as processDefineModel
     participant S as ctx.s (MagicString)
 
-    Loop->>DP: node = defineProps<Props>()
+    Walk->>DP: node = defineProps<Props>()
     DP->>S: 记录 propsTypeDecl，整条语句 remove 或改写
-    Loop->>DE: node = defineEmits(['change'])
+    Walk->>DE: node = defineEmits(['change'])
     DE->>S: 记录 emitsRuntimeDecl，callee 改写为 __emit
-    Loop->>DM: node = defineModel('count', {...})
+    Walk->>DM: node = defineModel('count', {...})
     DM->>S: callee 改写为 _useModel，参数前插入 __props
     Note over S: 所有改动都是对同一份 MagicString 的增量编辑
 ```
@@ -395,7 +395,7 @@ flowchart TD
     C -->|否| D{"canNeverBeRef(init)?\n对象/数组/函数/new 等字面量\n或 defineProps()/defineEmits() 调用"}
     D -->|是| SC["SETUP_CONST"]
     D -->|否| E{是 const 吗?}
-    E -->|否 (let)| SL["SETUP_LET"]
+    E -->|"否 (let)"| SL["SETUP_LET"]
     E -->|是| F{"isCallOf(init, ref/computed/\nshallowRef/toRef/defineModel 等)?"}
     F -->|是| SR["SETUP_REF"]
     F -->|否| SM["SETUP_MAYBE_REF\n(不确定是不是 ref 的函数调用结果)"]

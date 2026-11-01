@@ -83,7 +83,7 @@ graph TB
         patch --> processFragment
         patch --> processElement --> mountElement & patchElement
         patch --> processComponent --> mountComponent & updateComponent
-        patch -.Teleport/Suspense<br/>type.process.-> teleportOrSuspense["内置组件自己的 process()"]
+        patch -.->|"Teleport/Suspense<br/>type.process()"| teleportOrSuspense["内置组件自己的 process()"]
 
         patchElement --> patchBlockChildren
         patchElement --> patchChildren

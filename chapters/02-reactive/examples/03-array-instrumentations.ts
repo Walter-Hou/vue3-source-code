@@ -14,15 +14,23 @@ section('1. includes/indexOf：reactive 数组里的对象元素')
   const rawItem = { id: 1 }
   const list = reactive([rawItem, { id: 2 }])
 
-  step('用原始对象 rawItem 去 includes —— 它在数组里实际上已经被包成另一个 Proxy 了')
+  step('下标读取拿到的是 get 陷阱现场包出来的 reactive(rawItem)，不是 rawItem 本身')
   const got = list[0]
-  expectEq('list[0] === rawItem（直接下标访问，天然是同一个代理）', got === rawItem, false)
-  expectEq('list.includes(rawItem) 仍然能找到', list.includes(rawItem), true)
-  log('原理：arrayInstrumentations.includes -> searchProxy，先用原始参数查一次原生数组，')
-  log('找不到（因为数组里存的是 reactive(rawItem) 这个新 Proxy，不是 rawItem 本身）就再 toRaw(args[0]) 查一次')
+  expectEq('list[0] !== rawItem（读取时懒代理，拿到的是 Proxy）', got !== rawItem, true)
+  expectEq('toRaw(list[0]) === rawItem（原始数组里存的仍是 rawItem）', toRaw(got) === rawItem, true)
+
+  step('includes 拿原始对象查：searchProxy 在 toRaw(list) 上查，第一次就命中')
+  expectEq('list.includes(rawItem)', list.includes(rawItem), true)
+  log('如果没有插桩，原生 includes 会经 get 陷阱逐个读出 Proxy 再和 rawItem 比较，结果是 false')
+
+  step('includes 拿代理查：第一次在原始数组里找不到 Proxy，isProxy(args[0]) 成立 → toRaw 后再查一次')
+  expectEq('list.includes(list[0])', list.includes(got), true)
+  log('原理：arrayInstrumentations.includes -> searchProxy，先用原样参数查 toRaw(this)，')
+  log('结果为 -1/false 且参数是 Proxy 时，才退化成 toRaw(args[0]) 重查')
 
   step('indexOf 同理')
   expectEq('list.indexOf(rawItem)', list.indexOf(rawItem), 0)
+  expectEq('list.indexOf(list[0])', list.indexOf(got), 0)
 }
 
 section('2. 在 effect 里 push：不会死循环（两道保险，缺一都不够）')

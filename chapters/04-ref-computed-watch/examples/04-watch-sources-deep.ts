@@ -85,7 +85,7 @@ section('6. deep: 数字（3.5 新特性）：限定遍历层级')
   expectEq('在 deep 层级范围内的变化会触发', calls, 1)
 }
 
-section('7. watch shallowReactive 对象：即使不传 deep，也不会深度遍历')
+section('7. watch shallowReactive 对象，不传 deep，也不会深度遍历')
 {
   const state = shallowReactive({ nested: { a: 1 } })
   let calls = 0

@@ -18,7 +18,7 @@ section('1. RefImpl 的内部结构：_value / _rawValue / dep')
 section('2. ref 包对象：.value 会被 toReactive 转成 reactive 对象')
 {
   const r = ref({ count: 0 })
-  expectEq('r.value 是 reactive 的', isReactive(r.value), true)
+  expectEq('r.value 是 reactive 的，r.__v_isReactive', isReactive(r.value), true)
 
   step('直接改 r.value.count（通过 reactive 代理的 set 陷阱）')
   let runs = 0
@@ -37,7 +37,7 @@ section('2. ref 包对象：.value 会被 toReactive 转成 reactive 对象')
 section('3. shallowRef：不自动转 reactive，内部变化不可见')
 {
   const sr = shallowRef({ count: 0 })
-  expectEq('shallowRef 包的对象不是 reactive', isReactive(sr.value), false)
+  expectEq('shallowRef 包的对象不是 reactive，sr.__v_isReactive', isReactive(sr.value), false)
 
   let runs = 0
   effect(() => {

@@ -31,6 +31,7 @@ section('1. class / style 走专门模块，不受 shouldSetAsProp 影响')
   step('h("div", { class: "a b", style: { color: "red" } })')
   // class 落到 patchClass -> el.className；style 落到 patchStyle -> el.style.xxx
   log('el.className =', el.className)
+  log('el.getAttribute("class") =', el.getAttribute("class"))
   log('el.style.color =', el.style.color)
   log('el.getAttribute("style") =', el.getAttribute('style'))
 }
@@ -50,7 +51,7 @@ section('3. shouldSetAsProp 特判：form 属性必须走 attribute（只读 pro
   // patchProp.ts#L127-L129：key === 'form' 时 shouldSetAsProp 返回 false
   const el = mount(h('button', { form: 'my-form' }))
   step('h("button", { form: "my-form" })')
-  probe(el, 'form')
+  probe(el, 'button.form')
   log('button.form 这个 property 是只读的（指向 HTMLFormElement），只能靠 setAttribute 生效')
 }
 
@@ -59,7 +60,7 @@ section('4. shouldSetAsProp 特判：<input list> 必须走 attribute')
   // patchProp.ts#L132-L134
   const el = mount(h('input', { list: 'options-id' }))
   step('h("input", { list: "options-id" })')
-  probe(el, 'list')
+  probe(el, 'input.list')
   log('input.list 这个 property 是只读的（指向 <datalist> 元素），同样强制走 patchAttr')
 }
 
@@ -69,7 +70,7 @@ section('5. shouldSetAsProp 特判：<textarea type> 必须走 attribute')
   // 但如果当成 prop 设置，部分实现会抛错或无意义，所以强制走 attribute
   const el = mount(h('textarea', { type: 'text' }))
   step('h("textarea", { type: "text" })')
-  probe(el, 'type')
+  probe(el, 'textarea.type')
 }
 
 section('6. innerHTML：既不是 class/style/event，也会命中 shouldSetAsProp 的 "innerHTML/textContent 恒为 true"')
@@ -95,6 +96,7 @@ section('8. `.` 前缀：强制当 property（跳过 shouldSetAsProp 判定）')
   // patchProp.ts#L43-L49：key[0] === '.' 时直接走 property 分支（true 分支），对应模板里的 `<div .foo="val">`
   const el = mount(h('div', { '.myCustomProp': { x: 1 } } as any))
   step('h("div", { ".myCustomProp": { x: 1 } })')
+  probe(el, 'myCustomProp')
   log('(el as any).myCustomProp =', (el as any).myCustomProp)
   log('.foo 前缀用于把任意值（哪怕是对象）硬塞成 DOM property，常用于自定义元素 / web component 互操作')
 }

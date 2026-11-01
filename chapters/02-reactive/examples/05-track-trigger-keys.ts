@@ -69,10 +69,10 @@ section('3. 数组：ownKeys 追踪的是 "length" 而不是 ITERATE_KEY')
     },
     {
       onTrack(e) {
-        log(`[onTrack]  type=${e.type}  key=${fmtKey(e.key)}`)
+        log(`[onTrack] type=${e.type} key=${fmtKey(e.key)}`)
       },
       onTrigger(e) {
-        log(`[onTrigger] type=${e.type}  key=${fmtKey(e.key)}`)
+        log(`[onTrigger] type=${e.type} key=${fmtKey(e.key)}`)
       },
     },
   )

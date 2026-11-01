@@ -36,7 +36,7 @@ section('2. get：只有真正访问的 key 建立依赖')
   expectEq('改读过的 key 触发', runs, 2)
 }
 
-section('3. has：和 get 共用同一个 key 的 Dep（depsMap 按 key 分桶，不分 track 类型）')
+section('3. has: 和 get 共用同一个 key 的 Dep（depsMap 按 key 分桶，不分 track 类型）')
 {
   const m = reactive(new Map<string, number>())
   let runs = 0

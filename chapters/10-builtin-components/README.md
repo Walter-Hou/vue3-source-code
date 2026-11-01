@@ -138,7 +138,7 @@ flowchart TB
         F -->|unmount| H["transition.leave(el, performRemove)<br/>done() 之后才真正 hostRemove"]
     end
     KeepAliveComp["<KeepAlive> 组件自己的 setup()"] -. "把 activate/deactivate 写进<br/>instance.ctx" .-> KA
-    KeepAliveComp -. ctx.deactivate .-> KD
+    KeepAliveComp -. "ctx.deactivate" .-> KD
     BaseTransitionComp["<BaseTransition> 组件自己的 setup()"] -. "resolveTransitionHooks()<br/>写进 vnode.transition" .-> F
     AsyncWrapper["defineAsyncComponent() 返回的<br/>AsyncComponentWrapper 组件"] -. "是一个普通组件，<br/>走 MC/updateComponent" .-> MC
 ```

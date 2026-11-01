@@ -114,7 +114,7 @@ section('3. 函数式指令：被 withDirectives 内部展开成 { mounted: fn, 
   step('mount：函数式指令等价于 mounted 钩子被调用一次')
   n.value = 2
   await nextTick()
-  step('更新：函数式指令等价于 updated 钩子又被调用一次')
+  step('update：函数式指令等价于 updated 钩子又被调用一次')
   log('calls =', calls)
 }
 

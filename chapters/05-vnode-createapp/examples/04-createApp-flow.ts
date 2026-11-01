@@ -82,7 +82,7 @@ section('3. mount：createVNode -> appContext 挂载 -> render -> 根实例产�
 const root = createRoot()
 const instance = app.mount(root)
 
-step('mount 返回值就是根组件的 public instance（getComponentPublicInstance 的产物）')
+step('mount() 返回值就是根组件的 public instance（getComponentPublicInstance 的产物）')
 log('mount() 返回的 instance.$options.name =', (instance as any).$options.name)
 
 step('app._instance 现在指向根组件实例，app._container 指向挂载容器')
@@ -103,13 +103,13 @@ section('4. unmount：render(null, container) 卸载整棵树')
 app.unmount()
 
 step('unmount 之后 __vue_app__ 被删除')
-log('(root as any).__vue_app__ =', (root as any).__vue_app__)
+log('(root as any).__vue_app__：', (root as any).__vue_app__)
 
 step('unmount 触发的宿主操作：remove 掉所有节点')
 printOps('unmount')
 
 step('serialize(root)：卸载后容器变回空')
-log(JSON.stringify(serialize(root)))
+log(serialize(root))
 
 step('再次调用 unmount()：注意源码的 unmount() 成功卸载后并不会把 isMounted 重置回 false，')
 log('所以第二次调用仍会进入 render(null, container) 分支，只是 container._vnode 已经是 null，renderer 什么也不做：')

@@ -223,23 +223,27 @@ function cleanupDeps(sub: Subscriber) {
 
 ```
 运行前（读 a 分支）：
-  effect.deps ──► [cond]⇄[a] ◄── effect.depsTail
-                   ↑dep.subs    ↑dep.subs
-                  (cond的Dep)   (a的Dep)
+  effect.deps ──► [cond] ⇄ [a] ◄── effect.depsTail
+                    │       │
+                    │       └─ 同时挂在 a 的 Dep.subs 上
+                    └─ 同时挂在 cond 的 Dep.subs 上
 
-prepareDeps：把 cond、a 两个 link 的 version 都标成 -1
+prepareDeps：把 cond、a 两个 link 的 version 都标成 -1（链表结构不动）
 
 fn() 执行，这次走 b 分支：
-  - 读 cond：命中 activeLink，version===-1，同步 version，无需移动（已经是正确位置）
-  - 读 b：这是全新依赖，new Link，尾插到 depsTail 后面
-  运行中：effect.deps ──► [cond]⇄[a(version=-1)]⇄[b] ◄── effect.depsTail
+  - 读 cond：命中 activeLink，version===-1 → 复用，同步 version；
+    它后面还有 a（link.nextDep 不为空），于是被挪到链表尾部：
+      effect.deps ──► [a(-1)] ⇄ [cond] ◄── effect.depsTail
+  - 读 b：全新依赖，new Link，尾插到 depsTail 后面：
+      effect.deps ──► [a(-1)] ⇄ [cond] ⇄ [b] ◄── effect.depsTail
 
 cleanupDeps：从 depsTail 往回扫，发现 a 的 version 还是 -1 → removeSub(a) + removeDep(a)
 
-运行后：
-  effect.deps ──► [cond]⇄[b] ◄── effect.depsTail
-                            ↑dep.subs
-                           (b的Dep，新建的 Link)
+运行后（链表顺序 = 本次运行的访问顺序）：
+  effect.deps ──► [cond] ⇄ [b] ◄── effect.depsTail
+                    │       │
+                    │       └─ 挂在 b 的 Dep.subs 上（新建的 Link）
+                    └─ 挂在 cond 的 Dep.subs 上（复用的 Link）
 ```
 
 `a` 的 `Dep` 对象本身并没有被销毁（它可能还有别的 effect 订阅着，示例 01 第 3 组用 `probe` effect 验证了这一点），销毁的只是"这个 effect 和这个 Dep 之间的那条 Link"。`removeSub` 最后还会检查 `dep.sc`（订阅者计数）是否归零，归零且这个 Dep 挂在某个 `Map` 上（`dep.map`）就会把自己从 `targetMap` 的内层 `Map` 里也删掉，避免只有「不再被任何 effect 订阅」的属性依赖对象永久占用内存。

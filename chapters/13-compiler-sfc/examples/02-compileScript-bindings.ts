@@ -49,7 +49,7 @@ const tailStart = lines.findIndex(l => l.includes('__returned__'))
 log(lines.slice(Math.max(0, tailStart - 1), tailStart + 3).join('\n'))
 
 step('完整产物（节选顶部 import + defineComponent 签名）')
-log(lines.slice(0, 6).join('\n'))
+log(lines.slice(0).join('\n'))
 
 section('3. 对照源码判定规则（compileScript.ts#walkDeclaration, L1146-L1239）')
 log(

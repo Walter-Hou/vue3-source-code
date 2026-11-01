@@ -29,6 +29,7 @@ const scoped = compileTemplate({
   source: TEMPLATE,
   scoped: true,
   compilerOptions: {},
+  transformAssetUrls: false
 })
 log(scoped.code)
 step('解读')

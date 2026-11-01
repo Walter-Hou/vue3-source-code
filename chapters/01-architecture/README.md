@@ -129,8 +129,9 @@ Vue 2 的源码是单仓库、单构建产物（`src/core` 下一个大目录，
 第三个示例用 `baseCompile`（不带任何 DOM 相关配置）编译 `<input v-model="text" v-show="visible" />`，能直接看到这层边界：
 
 ```ts
-// baseCompile：没有 isNativeTag，把 <input> 当成"组件"来处理 v-model，
-// 生成的是组件层面的 modelValue / onUpdate:modelValue 两个 props
+// baseCompile：<input> 仍是元素（createElementBlock），但 compiler-core 的通用 v-model
+// transform 不区分元素/组件，一律生成 modelValue / onUpdate:modelValue 两个 props（组件协议）；
+// v-show 没有对应 transform，被静默丢弃
 return (_openBlock(), _createElementBlock("input", {
   modelValue: text,
   "onUpdate:modelValue": $event => ((text) = $event)
@@ -223,7 +224,7 @@ define: {
 
 1. 跑 `pnpm ex chapters/01-architecture/examples/01-package-dependency-graph.ts`，把输出的依赖图和上面的 Mermaid 图对照，确认自己能解释每一条依赖线的理由。
 2. 把示例二里的 `NODE_ENV` 改一下再跑（比如 `NODE_ENV=production pnpm ex chapters/01-architecture/examples/02-module-resolution-which-build.ts`），确认它会换成加载 `vue.cjs.prod.js`。
-3. 在示例三的基础上，试着给 `baseCompile` 传入 `isNativeTag: () => false`（强制一切都不是原生标签）和 `() => true`（强制一切都是原生标签），分别编译一次，观察 v-model 产物的变化——这能帮你确认"原生 vs 组件"这个判断到底是谁在起作用。
+3. 在示例三的基础上，试着给 `baseCompile` 传入 `isNativeTag: () => false`（强制一切都不是原生标签）和 `() => true`（强制一切都是原生标签），分别编译一次，对比产物：`() => true` 和不传完全一样；`() => false` 会变成 `resolveComponent("input")` + `createBlock`，但 v-model 生成的 props 三者都不变——这能帮你确认 `isNativeTag` 只决定"元素还是组件"，而"原生 `<input>` 用 vModelText 指令"是 compiler-dom 的 transform 决定的。
 
 ## 常见疑问
 

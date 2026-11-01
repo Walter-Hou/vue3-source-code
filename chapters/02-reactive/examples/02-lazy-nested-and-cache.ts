@@ -48,6 +48,7 @@ section('3. markRaw：彻底跳过代理，即使嵌套在 reactive 对象里也
   const raw = markRaw(new ThirdPartyInstance(1))
   const state = reactive({ lib: raw })
 
+  expectEq('isReactive(state)', isReactive(state), true);
   expectEq('isReactive(state.lib)', isReactive(state.lib), false)
   expectEq('state.lib === raw（没有被包成新的 Proxy）', state.lib === raw, true)
   log('典型场景：第三方类实例（如 echarts 的 chart 对象）塞进 reactive 状态里，又不想被 Proxy 包一层时用 markRaw')
@@ -59,6 +60,15 @@ section('4. toRaw：拿到原始对象，绕过 get/set 陷阱')
   const raw = toRaw(state)
   expectEq('toRaw(state) !== state', raw !== (state as any), true)
   expectEq('toRaw(toRaw(state)) === toRaw(state)（递归解包，多层代理也只剥到底层原始对象）', toRaw(raw) === raw, true)
+
+  step('__v_raw / __v_isReactive 不是真实字段：只是 get 陷阱里按 key 现场返回的值')
+  expectEq('Reflect.ownKeys(raw)', Reflect.ownKeys(raw), ['a'])
+  expectEq('Reflect.ownKeys(state)（ownKeys 陷阱转发给 target，同样只有 a）', Reflect.ownKeys(state), ['a'])
+  expectEq('(state as any).__v_raw === raw（get 陷阱命中 key === "__v_raw" 返回 target）', (state as any).__v_raw === raw, true)
+  expectEq('(state as any).__v_isReactive（由 handler._isReadonly 推出，不是存储值）', (state as any).__v_isReactive, true)
+  expectEq("'__v_raw' in state（has 陷阱存在，但不像 get 那样特判 __v_* key，只做 Reflect.has(raw) + track → 查不到）", '__v_raw' in state, false)
+  expectEq('(raw as any).__v_raw（原始对象上什么标志都没有）', (raw as any).__v_raw, undefined)
+  log('源码位置：packages/reactivity/src/baseHandlers.ts 的 BaseReactiveHandler.get，开头几个 if 分支专门处理 ReactiveFlags')
 
   step('用 toRaw 读写不会触发 track/trigger —— 常用于“批量初始化，不想触发一堆 effect”的场景')
   log('（这里不方便直接打印“有没有触发”，第 5 章会用 onTrack/onTrigger 更直接地证明这一点）')

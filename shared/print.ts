@@ -21,7 +21,7 @@ export function section(title: string): void {
 /** 小步骤：描述「接下来做什么」 */
 export function step(desc: string): void {
   stepNo++
-  console.log(`│ ${String(stepNo).padStart(2, ' ')}. ${desc}`)
+  console.log(`│ step${String(stepNo).padStart(2, ' ')}. ${desc}`)
 }
 
 /** 普通输出：缩进两格，和 step 对齐 */

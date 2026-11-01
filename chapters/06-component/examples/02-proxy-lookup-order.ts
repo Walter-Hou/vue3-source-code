@@ -20,7 +20,10 @@ let instanceRef: any
 
 const Comp = defineComponent({
   name: 'Comp',
-  props: { shared: { type: String, default: 'from-props' } },
+  props: {
+    shared: { type: String, default: 'from-props' },
+    onlyInProps: { type: String, default: 'from-props' }
+  },
   data() {
     // data() 里也声明一个 shared 字段 —— 和 props 同名在 Options API 里是不被允许的
     // （开发期会有 duplicate key 警告），这里改用一个不冲突的 data-only 字段 + 一个单独的
@@ -53,9 +56,9 @@ step('setupState 和 props 同名（shared）时，谁赢？')
 log('this.shared =', proxyRef.shared, '(源码 get 陷阱：先查 setupState，查到就直接返回，不会再看 props)')
 
 step('只在某一层定义的字段：setupOnly / dataOnly / methodOnly / props.shared 对应的真实值')
-log('this.setupOnly =', proxyRef.setupOnly)
-log('this.dataOnly  =', proxyRef.dataOnly)
-log('this.methodOnly() =', proxyRef.methodOnly())
+// log('this.setupOnly =', proxyRef.setupOnly)
+// log('this.dataOnly  =', proxyRef.dataOnly)
+// log('this.methodOnly() =', proxyRef.methodOnly())
 log('instance.props.shared（绕开 setupState 直接看 props 原始值）=', instanceRef.props.shared)
 
 section('2. $ 开头的公共属性：publicPropertiesMap')
@@ -79,19 +82,24 @@ log('访问过 setupOnly 之后 accessCache.setupOnly =', instanceRef.accessCach
 void proxyRef.dataOnly
 log('访问过 dataOnly 之后 accessCache.dataOnly   =', instanceRef.accessCache.dataOnly, '(2 = AccessTypes.DATA)')
 void proxyRef.$props // $ 开头的 key 不会进 accessCache（get 陷阱里 key[0] !== '$' 才会查缓存）
-log('$props 有没有进 accessCache                 =', 'props' in instanceRef.accessCache === false)
+log('$props 有没有进 accessCache                 =', '$props' in instanceRef.accessCache)
 
 section('4. 对 props 赋值 / 修改 $ 属性 会被 set 陷阱拦截')
 
-step('this.shared = "xxx"：props 虽然被 setupState 遮蔽读取，但 instance.props 仍然只读')
+step('this.onlyInProps = "xxx"：只存在于 props 的 key，命中 hasOwn(instance.props) 分支 → 警告 + return false')
 try {
-  // 注意：由于 setupState 里也有同名 shared 字段，赋值实际命中的是 hasSetupBinding 分支
-  // （setupState 可写），所以换一个"只存在于 props、不在 setupState"的 key 来验证只读警告
+  // 不用 shared 来验证：setupState 里也有同名 shared，赋值会先命中 hasSetupBinding 分支（setupState 可写）。
+  // this 本身不存字段，set 陷阱按 setupState -> data -> props -> ctx 的顺序把写操作路由出去，
+  // onlyInProps 只在 props 里，所以落到 props 分支被拒绝
   ;(proxyRef as any).onlyInProps = 'try to mutate'
 } catch (e) {
-  log('赋值抛出异常:', (e as Error).message)
+  log('捕获到异常（set 陷阱返回 false，严格模式下 Proxy 抛 TypeError）:', (e as Error).message)
 }
-log('赋值后 instance.props.onlyInProps =', instanceRef.props.onlyInProps, '(undefined，因为它压根不是声明的 prop，走的是"写入 ctx" 分支)')
+log('赋值后 instance.props.onlyInProps 仍是原值 =', instanceRef.props.onlyInProps)
+
+step('对照：未声明的 key 不会报错，set 陷阱落到最后的 ctx[key] = value 分支，静默写进 ctx')
+;(proxyRef as any).undeclared = 'written to ctx'
+log('instance.ctx.undeclared =', instanceRef.ctx.undeclared, ' instance.props.undeclared =', instanceRef.props.undeclared)
 
 step('this.$data = "xxx"：$ 开头且是保留字段，set 陷阱返回 false 会警告 + 严格模式下 Proxy 再抛 TypeError')
 try {

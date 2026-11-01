@@ -326,7 +326,7 @@ ownKeys(target): (string | symbol)[] {
 
 这是 3.5 从 `baseHandlers.ts` 里拆出来的独立文件（412 行），解决三类问题：
 
-**(1) 身份敏感方法**（`includes`/`indexOf`/`lastIndexOf`）：数组里存的元素是 `reactive()` 包过的 Proxy，用户传进来的参数却经常是原始对象，`===` 比较会失败。
+**(1) 身份敏感方法**（`includes`/`indexOf`/`lastIndexOf`）：原始数组里存的是原始对象，但通过代理读元素时 get 陷阱会现场包成 `reactive()` Proxy。原生 `includes` 走代理逐个读元素，读出来的是 Proxy，拿原始对象去 `===` 比较就会失败；反过来，拿 `list[0]` 这种 Proxy 去原始数组里查，同样匹配不上。
 
 ```ts
 // packages/reactivity/src/arrayInstrumentations.ts#L380-L397
@@ -342,7 +342,7 @@ function searchProxy(self, method, args) {
 }
 ```
 
-先按用户传的参数原样查一次，查不到（且参数本身是个 Proxy）就把参数转成 `toRaw` 再查一次——两次尝试，保证无论用户传的是原始对象还是代理对象都能找到。
+关键在第一行 `toRaw(self)`：查找发生在原始数组上，所以传原始对象时第一次就能命中；只有第一次查不到、且参数本身是 Proxy 时（比如 `list.includes(list[0])`），才把参数 `toRaw` 后再查一次——保证无论用户传的是原始对象还是代理对象都能找到。
 
 **(2) 读取型方法**（`map`/`filter`/`forEach`/`find`/`every`/`some`/`reduce`...）：这些方法会访问数组的"全部元素"，但没必要给每个索引单独建一个依赖——那样数组一大，依赖数量就爆炸。源码的做法是只 track 一次 `ARRAY_ITERATE_KEY`：
 

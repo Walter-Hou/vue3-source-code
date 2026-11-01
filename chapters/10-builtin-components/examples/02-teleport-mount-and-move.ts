@@ -114,6 +114,7 @@ render(h(App3), appRoot3)
 await nextTick()
 resetOps()
 log('初始 modalRootA:', serialize(modalRootA, 2))
+log('初始 modalRootB（应为空）:', serialize(modalRootB, 2))
 
 step('target: A -> B（应只看到 insert，没有 createElement / remove+create）')
 target.value = 'B'

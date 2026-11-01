@@ -9,11 +9,11 @@
  *      （createElement/insert/patchProp/...）——这就是它"不知道 DOM 具体怎么操作"
  *      的证据，真正知道怎么操作 DOM 的是 @vue/runtime-dom（第 14 章）。
  *   3. @vue/compiler-core 自带的 directiveTransforms 其实包含一个通用的 v-model
- *      实现（把 modelValue/onUpdate:modelValue 当 props 生成），但它完全不知道
- *      "HTML 标签"和"组件"的区别（没有 isNativeTag 就把谁都当组件处理）；
+ *      实现（把 modelValue/onUpdate:modelValue 当 props 生成），而且不管目标是
+ *      原生元素还是组件，生成的 props 都一样——它不知道 <input> 需要特殊对待；
  *      v-show 则完全没有通用实现，在 baseCompile 里会被直接丢弃。
- *      @vue/compiler-dom 叠加了一层 DOM 专属 transform：按标签名区分原生元素/组件，
- *      给原生 <input> 生成真正的 vModelText 指令调用，并补上 vShow。
+ *      @vue/compiler-dom 叠加了一层 DOM 专属 transform：对原生 <input>/<textarea>/
+ *      <select> 去掉 modelValue prop，换成真正的 vModelText 等指令调用，并补上 vShow。
  */
 import { reactive, effect } from '@vue/reactivity'
 import { createRenderer, h } from '@vue/runtime-core'
@@ -99,14 +99,16 @@ section('3. @vue/compiler-core 不知道"HTML 标签"，@vue/compiler-dom 补上
   log(
     '\n真实结果比"直接报错或忽略"更微妙：',
     '1) v-model 在 baseCompile 里其实编译成功了——生成了 modelValue / onUpdate:modelValue',
-    '   两个 props，因为 compiler-core 自带通用的 v-model transform，但它判断"这是不是',
-    '   原生元素"要靠 isNativeTag 这个 parserOptions，baseCompile 没传，于是把 <input>',
-    '   当成了组件来处理（组件上的 v-model 本来就是"生成 modelValue prop + 监听',
-    '   update:modelValue 事件"这套通用协议）。',
+    '   两个 props。注意 <input> 在这里仍然是元素（产物是 createElementBlock("input")，',
+    '   不是 resolveComponent），只是 compiler-core 自带的通用 v-model transform 不区分',
+    '   元素和组件，一律套用"modelValue prop + update:modelValue 事件"这套组件协议。',
+    '   （isNativeTag 只决定"是不是组件"：不传或返回 true 都按元素处理，返回 false',
+    '   才会把 <input> 当成名叫 input 的组件去 resolveComponent，props 部分不变。）',
     '2) v-show 在 baseCompile 里完全没有生效，也没有报错——它被静默丢弃了，因为',
     '   compiler-core 根本不认识这个指令名，而"未知指令"在源码里就是直接跳过。',
-    '3) compiler-dom 的产物完全不同：按 isNativeTag 认出 <input> 是原生元素，于是',
-    '   用 DOM 专属的 vModelText 指令（能处理 lazy/trim/number 修饰符、composition',
+    '3) compiler-dom 的产物完全不同：它自己的 v-model transform 先调用 compiler-core',
+    '   的通用版本，再发现目标是原生 <input> 元素，于是用 DOM 专属的 vModelText 指令',
+    '   （能处理 lazy/trim/number 修饰符、composition',
     '   事件）替换掉通用的 prop 写法，v-show 也补上了 vShow 指令——这两个都写在',
     '   compiler-dom/src/transforms/{vModel,vShow}.ts 里，compiler-core 本身',
     '   不内置任何"浏览器专属"的指令语义。',

@@ -64,7 +64,7 @@ section('1. 新增属性：Vue 2 defineProperty 版 vs Vue 3 Proxy 版')
   track()
   v3.b = 2
   track()
-  log('Proxy 版本：b 被访问 + 修改后，“手写 effect”运行次数 =', v3Runs, '（新增属性一样能被追踪到）')
+  log('Proxy 版本：b 被访问 + 修改后，' + v3.b + ', 手写 effect 运行次数 =', v3Runs, '（新增属性一样能被追踪到）')
 }
 
 section('2. 数组索引赋值：arr[idx] = x')
@@ -115,7 +115,7 @@ section('4. delete 属性')
   step('delete 一个已存在的属性')
   notified.length = 0
   delete v2.a
-  log('defineProperty 版本收到的通知：', notified, '-> v2 =', v2)
+  log('defineProperty 版本收到的通知：', notified, '-> v2 =', JSON.stringify(v2))
   log('delete 只是把属性从对象上摘掉，Object.defineProperty 装好的 getter/setter 根本不会被触发')
 
   let v3Runs = 0

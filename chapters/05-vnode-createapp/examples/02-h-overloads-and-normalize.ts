@@ -32,18 +32,21 @@ step('h("div") —— 只有 type')
 }
 
 step('h("div", { id: "a" }) —— 第二参是"非数组对象"当 props')
-log({ props: h('div', { id: 'a' }).props })
+{
+  const v = h('div', { id: 'a' });
+  log({ type: v.type, props: v.props, children: v.children, shapeFlag: v.shapeFlag })
+}
 
 step('h("div", "text") —— 第二参是字符串，视为 children，props 省略为 null')
 {
   const v = h('div', 'text')
-  log({ props: v.props, children: v.children })
+  log({ type: v.type, props: v.props, children: v.children, shapeFlag: v.shapeFlag })
 }
 
 step('h("div", [h("span")]) —— 第二参是数组，也视为 children（省略 props）')
 {
   const v = h('div', [h('span')])
-  log({ props: v.props, childrenLength: (v.children as any[]).length })
+  log({ type: v.type, props: v.props, children: v.children, shapeFlag: v.shapeFlag })
 }
 
 step('h("div", h("span")) —— 第二参是"单个 vnode"，会被包一层数组再当 children')
@@ -52,7 +55,7 @@ step('h("div", h("span")) —— 第二参是"单个 vnode"，会被包一层数
   const v = h('div', inner)
   log({
     props: v.props,
-    isArray: Array.isArray(v.children),
+    childrenIsArray: Array.isArray(v.children),
     firstChildIsInner: (v.children as any[])[0] === inner,
   })
 }
@@ -63,7 +66,7 @@ step('h("div", {}, a, b, c) —— 超过 3 个参数时，从第 3 个开始都
   // 但公开的 .d.ts 里 h() 的重载都只声明到 3 个参数，所以这种调用方式在类型层面
   // 没有对应的重载——这正好印证了看点 1："类型声明和运行时实现是两回事"。
   const v = (h as any)('div', {}, h('span', '1'), h('span', '2'), 'text')
-  log({ childrenLength: (v.children as any[]).length })
+  log({ props: v.props, childrenLength: (v.children as any[]).length })
 }
 
 step('h(Comp, null, {}) —— 具名插槽必须显式传 null 占位 props，否则 {} 会被当成 props 而不是 slots')
@@ -116,9 +119,9 @@ step('cloneVNode(vnode, extraProps)：合并 props，并打上 FULL_PROPS')
   const original = createVNode('div', { id: 'a' }, 'hi', PatchFlags.TEXT)
   const cloned = cloneVNode(original, { class: 'extra' })
   log('original.patchFlag =', original.patchFlag, '(PatchFlags.TEXT = 1)')
-  log('cloned.props        =', cloned.props)
+  log('cloned.props =', cloned.props)
   log(
-    'cloned.patchFlag     =',
+    'cloned.patchFlag =',
     cloned.patchFlag,
     `(TEXT | FULL_PROPS = ${PatchFlags.TEXT | PatchFlags.FULL_PROPS}；源码：patchFlag | PatchFlags.FULL_PROPS)`,
   )
@@ -130,8 +133,8 @@ step('mergeProps：class/style 会合并拼接，on* 事件会合并成数组，
     { class: 'a', style: { color: 'red' }, onClick: () => {}, id: 'x' },
     { class: 'b', style: { fontSize: '12px' }, onClick: () => {}, id: 'y' },
   )
-  log('class  =', merged.class, '(两个 class 用空格拼接)')
-  log('style  =', merged.style, '(两个 style 对象合并)')
+  log('class =', merged.class, '(两个 class 用空格拼接)')
+  log('style =', merged.style, '(两个 style 对象合并)')
   log('onClick 是否变成数组 =', Array.isArray(merged.onClick), '(两个处理函数都要调用，所以合并成数组)')
-  log('id     =', merged.id, '(普通 key 后者覆盖前者)')
+  log('id =', merged.id, '(普通 key 后者覆盖前者)')
 }
